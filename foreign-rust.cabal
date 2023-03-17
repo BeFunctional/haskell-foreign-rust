@@ -1,0 +1,131 @@
+cabal-version:      3.0
+name:               foreign-rust
+version:            0.1.0
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Edsko de Vries
+maintainer:         edsko@well-typed.com
+category:           Development
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+tested-with:        GHC==8.6.5
+                  , GHC==8.8.4
+                  , GHC==8.10.7
+                  , GHC==9.0.2
+                  , GHC==9.2.7
+                  , GHC==9.4.4
+
+common lang
+  build-depends:
+      base >= 4.12
+  default-language:
+      Haskell2010
+  ghc-options:
+      -Wall
+      -Wredundant-constraints
+  if impl(ghc >= 8.10)
+    ghc-options:
+      -Wunused-packages
+  default-extensions:
+      DataKinds
+      DefaultSignatures
+      DeriveAnyClass
+      DeriveGeneric
+      DerivingStrategies
+      DerivingVia
+      FlexibleContexts
+      FlexibleInstances
+      GADTs
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      PolyKinds
+      RankNTypes
+      ScopedTypeVariables
+      StandaloneDeriving
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      TypeOperators
+      UndecidableInstances
+
+library
+  import:
+      lang
+  exposed-modules:
+      Foreign.Rust.External.JSON
+      Foreign.Rust.External.Bincode
+      Foreign.Rust.Failure
+      Foreign.Rust.Marshall.Fixed
+      Foreign.Rust.Marshall.Variable
+      Foreign.Rust.SafeConv
+      Foreign.Rust.Serialisation.JSON
+      Foreign.Rust.Serialisation.Raw
+      Foreign.Rust.Serialisation.Raw.Base16
+      Foreign.Rust.Serialisation.Raw.Base58
+      Foreign.Rust.Serialisation.Raw.Base64
+      Foreign.Rust.Serialisation.Raw.Decimal
+
+      Data.Annotated
+      Data.Structured
+      Data.Structured.TH
+  other-modules:
+      Foreign.Rust.Marshall.Util
+  hs-source-dirs:
+      src
+  build-depends:
+    , aeson
+    , base16-bytestring
+    , base58-bytestring
+    , base64-bytestring
+    , binary
+    , borsh >= 0.3
+    , bytestring
+    , containers
+    , data-default
+    , generics-sop
+    , OneTuple
+    , sop-core
+    , template-haskell
+    , text
+    , th-abstraction
+    , vector
+    , wide-word
+
+test-suite test-foreign-rust
+  import:
+      lang
+  type:
+      exitcode-stdio-1.0
+  main-is:
+      Main.hs
+  other-modules:
+      Test.Serialisation.JSON
+      Test.Serialisation.Raw.Base16
+      Test.Serialisation.Raw.Base58
+      Test.Serialisation.Raw.Base64
+      Test.Serialisation.Raw.Decimal
+      Test.Serialisation.Types
+      Test.Util.TH
+  hs-source-dirs:
+      test
+  build-depends:
+    , aeson
+    , foreign-rust
+    , haskell-src-exts
+    , tasty
+    , tasty-hunit
+    , template-haskell
+
+test-suite demo-annotated
+  import:
+      lang
+  type:
+      exitcode-stdio-1.0
+  main-is:
+      Main.hs
+  hs-source-dirs:
+      demo-annotated
+  build-depends:
+    , generics-sop
+    , foreign-rust
