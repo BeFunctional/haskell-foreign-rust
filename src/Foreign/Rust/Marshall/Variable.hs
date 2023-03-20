@@ -13,6 +13,10 @@ module Foreign.Rust.Marshall.Variable (
   , withBorshVarBuffer
   , withBorshMaxBuffer
   , withBorshFailure
+    -- ** Pure variants
+  , withPureBorshVarBuffer
+  , withPureBorshMaxBuffer
+  , withPureBorshFailure
   ) where
 
 import Codec.Borsh
@@ -66,7 +70,7 @@ withBorshVarBuffer :: forall a.
      , StaticBorshSize a ~ 'HasVariableSize
      , Typeable a
      )
-  => (Buffer a -> IO ()) -> a
+  => (Buffer a -> IO ()) -> IO a
 withBorshVarBuffer = withBorshBufferOfInitSize 1024
 
 withBorshMaxBuffer :: forall a.
@@ -75,7 +79,7 @@ withBorshMaxBuffer :: forall a.
      , BorshMaxSize a
      , Typeable a
      )
-  => (Buffer a -> IO ()) -> a
+  => (Buffer a -> IO ()) -> IO a
 withBorshMaxBuffer =
    withBorshBufferOfInitSize initBufSize
   where
@@ -89,8 +93,39 @@ withBorshFailure :: forall a.
      , Typeable a
      , HasCallStack
      )
+  => (Buffer (Either Text a) -> IO ()) -> IO (Either Failure a)
+withBorshFailure = fmap (first mkFailure) . withBorshVarBuffer
+
+{-------------------------------------------------------------------------------
+  Pure variants
+-------------------------------------------------------------------------------}
+
+withPureBorshVarBuffer :: forall a.
+     ( FromBorsh a
+     , StaticBorshSize a ~ 'HasVariableSize
+     , Typeable a
+     )
+  => (Buffer a -> IO ()) -> a
+withPureBorshVarBuffer = unsafePerformIO . withBorshVarBuffer
+
+withPureBorshMaxBuffer :: forall a.
+     ( FromBorsh a
+     , StaticBorshSize a ~ 'HasVariableSize
+     , BorshMaxSize a
+     , Typeable a
+     )
+  => (Buffer a -> IO ()) -> a
+withPureBorshMaxBuffer = unsafePerformIO . withBorshMaxBuffer
+
+withPureBorshFailure :: forall a.
+     ( FromBorsh a
+     , StaticBorshSize a ~ 'HasVariableSize
+     , Typeable a
+     , HasCallStack
+     )
   => (Buffer (Either Text a) -> IO ()) -> Either Failure a
-withBorshFailure = first mkFailure . withBorshVarBuffer
+withPureBorshFailure = unsafePerformIO . withBorshFailure
+
 
 {-------------------------------------------------------------------------------
   Internal auxiliary
@@ -102,8 +137,8 @@ withBorshBufferOfInitSize :: forall a.
      , StaticBorshSize a ~ 'HasVariableSize
      , Typeable a
      )
-  => CULong -> (Buffer a -> IO ()) -> a
-withBorshBufferOfInitSize initBufSize f = unsafePerformIO $ do
+  => CULong -> (Buffer a -> IO ()) -> IO a
+withBorshBufferOfInitSize initBufSize f = do
     mFirstAttempt <- allocaBytes (culongToInt initBufSize) $ \buf -> do
       (bigEnough, reqSz) <- callWithSize buf initBufSize
       if bigEnough then
