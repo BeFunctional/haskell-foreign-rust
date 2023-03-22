@@ -11,11 +11,9 @@ module Foreign.Rust.Marshall.Variable (
   , Buffer -- opaque
   , getVarBuffer
   , withBorshVarBuffer
-  , withBorshMaxBuffer
   , withBorshFailure
     -- ** Pure variants
   , withPureBorshVarBuffer
-  , withPureBorshMaxBuffer
   , withPureBorshFailure
   ) where
 
@@ -73,19 +71,6 @@ withBorshVarBuffer :: forall a.
   => (Buffer a -> IO ()) -> IO a
 withBorshVarBuffer = withBorshBufferOfInitSize 1024
 
-withBorshMaxBuffer :: forall a.
-     ( FromBorsh a
-     , StaticBorshSize a ~ 'HasVariableSize
-     , BorshMaxSize a
-     , Typeable a
-     )
-  => (Buffer a -> IO ()) -> IO a
-withBorshMaxBuffer =
-   withBorshBufferOfInitSize initBufSize
-  where
-    initBufSize :: CULong
-    initBufSize = fromIntegral $ borshMaxSize (Proxy @a)
-
 -- | Wrapper around 'withBorshVarBuffer' with explicit support for failures
 withBorshFailure :: forall a.
      ( FromBorsh a
@@ -108,15 +93,6 @@ withPureBorshVarBuffer :: forall a.
   => (Buffer a -> IO ()) -> a
 withPureBorshVarBuffer = unsafePerformIO . withBorshVarBuffer
 
-withPureBorshMaxBuffer :: forall a.
-     ( FromBorsh a
-     , StaticBorshSize a ~ 'HasVariableSize
-     , BorshMaxSize a
-     , Typeable a
-     )
-  => (Buffer a -> IO ()) -> a
-withPureBorshMaxBuffer = unsafePerformIO . withBorshMaxBuffer
-
 withPureBorshFailure :: forall a.
      ( FromBorsh a
      , StaticBorshSize a ~ 'HasVariableSize
@@ -125,7 +101,6 @@ withPureBorshFailure :: forall a.
      )
   => (Buffer (Either Text a) -> IO ()) -> Either Failure a
 withPureBorshFailure = unsafePerformIO . withBorshFailure
-
 
 {-------------------------------------------------------------------------------
   Internal auxiliary

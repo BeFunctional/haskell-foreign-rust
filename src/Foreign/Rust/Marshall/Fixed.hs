@@ -9,7 +9,8 @@ module Foreign.Rust.Marshall.Fixed (
     toBorshFixed
     -- * Rust to Haskell
   , allocFixedBuffer
-  , fromBorshFixed
+  , allocMaxBuffer
+  , fromBorsh
   ) where
 
 import Codec.Borsh
@@ -33,7 +34,7 @@ toBorshFixed a k =
     Strict.useAsCStringLen (serialiseStrict a) (k . castFromSignedLen)
 
 {-------------------------------------------------------------------------------
-  Rust to Haskell
+  Rust to Haskell: exact size known
 -------------------------------------------------------------------------------}
 
 allocFixedBuffer :: forall a.
@@ -47,9 +48,21 @@ allocFixedBuffer k =
     cast :: Word32 -> Int
     cast = fromIntegral
 
-fromBorshFixed ::
-     (FromBorsh a, StaticBorshSize a ~ 'HasKnownSize, Typeable a)
-  => Ptr CUChar -> CULong -> IO a
-fromBorshFixed ptr len =
+allocMaxBuffer :: forall a.
+     ( BorshSize a
+     , StaticBorshSize a ~ 'HasVariableSize
+     , BorshMaxSize a
+     )
+  => ((Ptr CUChar, CULong) -> IO a) -> IO a
+allocMaxBuffer k =
+    let n = borshMaxSize (Proxy @a)
+    in allocaBytes (cast n) $ \ptr -> k (ptr, fromIntegral n)
+  where
+    cast :: Word32 -> Int
+    cast = fromIntegral
+
+fromBorsh :: (FromBorsh a, Typeable a) => Ptr CUChar -> CULong -> IO a
+fromBorsh ptr len =
     deserialiseStrictOrPanic <$>
       Strict.packCStringLen (castToSigned ptr, fromIntegral len)
+
