@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 module Data.Annotated (
     -- * Definition
     CanAnnotate(..)
@@ -18,6 +20,8 @@ import Data.Int
 import Data.Kind
 import Data.Map (Map)
 import Data.Proxy
+import Data.SOP (SOP)
+import Data.Tuple.Solo
 import Data.WideWord
 import Data.Word
 
@@ -27,7 +31,6 @@ import qualified Generics.SOP        as SOP
 import qualified GHC.Generics        as GHC
 
 import qualified Data.Structured as Structured
-import Data.Tuple.Solo
 
 {-------------------------------------------------------------------------------
   Definition
@@ -35,7 +38,16 @@ import Data.Tuple.Solo
 
 class CanAnnotate a where
   type Annotated a :: Type
+
+  -- | Annotate value
   annotate :: a -> Annotated a
+
+  -- | Drop annotation
+  --
+  -- NOTE: 'Annotated' is a non-injective type family. You might need to supply
+  -- a type argument to 'dropAnnotation' if the resulting type is not clear
+  -- from context.
+  dropAnnotation :: Annotated a -> a
 
 {-------------------------------------------------------------------------------
   Deriving via support: computing annotations
@@ -66,6 +78,7 @@ instance ComputeAnnotation a => CanAnnotate (PairWithAnnotation a) where
         value      = x
       , annotation = computeAnnotation x
       }
+  dropAnnotation = PairWithAnnotation . value
 
 data WithAnnotation a b = WithAnnotation {
       value      :: a
@@ -107,6 +120,7 @@ instance ( Functor f
         value      = annotate <$> xs
       , annotation = Length $ length xs
       }
+  dropAnnotation = AnnotateFoldable . fmap dropAnnotation . value
 
 {-------------------------------------------------------------------------------
   Deriving-via: no annotation
@@ -125,6 +139,100 @@ type instance Annotation (NoAnnotation a) = ()
 instance CanAnnotate (NoAnnotation a) where
   type Annotated (NoAnnotation a) = a
   annotate (NoAnnotation x) = x
+  dropAnnotation = NoAnnotation
+
+{-------------------------------------------------------------------------------
+  generics-sop auxiliary: reasoning about AllZip and AllZip2
+-------------------------------------------------------------------------------}
+
+class    c y x => Inv (c :: l -> k -> Constraint) (x :: k) (y :: l)
+instance c y x => Inv (c :: l -> k -> Constraint) (x :: k) (y :: l)
+
+data Dict2 (c :: k -> k -> Constraint) (x :: k) (y :: k) where
+  Dict2 :: c x y => Dict2 c x y
+
+invZip :: forall k c (xs :: [k]) (ys :: [k]).
+     SOP.AllZip c xs ys
+  => Proxy c
+  -> Proxy ys
+  -> Proxy xs
+  -> Dict2 (SOP.AllZip (Inv c)) ys xs
+invZip _ _ _ = go SOP.shape SOP.shape
+  where
+    go :: forall xs' ys'.
+         SOP.AllZip c xs' ys'
+      => SOP.Shape xs' -> SOP.Shape ys' -> Dict2 (SOP.AllZip (Inv c)) ys' xs'
+    go SOP.ShapeNil        SOP.ShapeNil      = Dict2
+    go (SOP.ShapeCons xs) (SOP.ShapeCons ys) =
+        case go xs ys of
+          Dict2 -> Dict2
+
+zipImplies :: forall k c d (xs :: [k])  (ys :: [k]).
+      SOP.AllZip c xs ys
+   => Proxy c
+   -> Proxy d
+   -> Proxy xs
+   -> Proxy ys
+   -> (forall x y. c x y => Proxy x -> Proxy y -> Dict2 d x y)
+   -> Dict2 (SOP.AllZip d) xs ys
+zipImplies _ _ _ _ f = go SOP.shape SOP.shape
+  where
+    go :: forall xs' ys'.
+         SOP.AllZip c xs' ys'
+      => SOP.Shape xs' -> SOP.Shape ys' -> Dict2 (SOP.AllZip d) xs' ys'
+    go SOP.ShapeNil        SOP.ShapeNil      = Dict2
+    go (SOP.ShapeCons xs) (SOP.ShapeCons ys) =
+        case (f (Proxy @(SOP.Head xs')) (Proxy @(SOP.Head ys')), go xs ys) of
+          (Dict2, Dict2) -> Dict2
+
+invAllZip :: forall k (c :: k -> k -> Constraint) (xss :: [[k]]) (yss :: [[k]]).
+     SOP.AllZip (Inv (SOP.AllZip c)) xss yss
+  => Proxy c
+  -> Proxy xss
+  -> Proxy yss
+  -> Dict2 (SOP.AllZip (SOP.AllZip (Inv c))) xss yss
+invAllZip pc pxss pyss =
+    zipImplies
+      (Proxy @(Inv (SOP.AllZip c)))
+      (Proxy @(SOP.AllZip (Inv c)))
+      pxss
+      pyss
+      (invZip pc)
+
+invZip2 :: forall k c (xss :: [[k]]) (yss :: [[k]]).
+     SOP.AllZip2 c xss yss
+  => Proxy c
+  -> Proxy yss
+  -> Proxy xss
+  -> Dict2 (SOP.AllZip2 (Inv c)) yss xss
+invZip2 pc pyss pxss =
+    case invZip (Proxy @(SOP.AllZip c)) pyss pxss of
+      Dict2 -> case invAllZip pc pyss pxss of
+                 Dict2 -> Dict2
+
+htransInv_SOP :: forall k c f g (xss :: [[k]]) (yss :: [[k]]).
+     SOP.AllZip2 c yss xss
+  => Proxy c
+  -> (forall x y. c y x => f x -> g y)
+  -> SOP f xss
+  -> SOP g yss
+htransInv_SOP pc f =
+    case invZip2 pc (Proxy @xss) (Proxy @yss) of
+      Dict2 -> SOP.htrans (Proxy @(Inv c)) f
+
+{-------------------------------------------------------------------------------
+  Internal auxiliary: two-parameter wrapper around 'CanAnnotate'
+
+  We use this for a generic @htrans@.
+-------------------------------------------------------------------------------}
+
+class Annotate' a b where
+  annotate'       :: a -> b
+  dropAnnotation' :: b -> a
+
+instance (CanAnnotate a, b ~ Annotated a) => Annotate' a b where
+  annotate'       = annotate
+  dropAnnotation' = dropAnnotation
 
 {-------------------------------------------------------------------------------
   Deriving via: generics
@@ -143,27 +251,26 @@ instance CanAnnotate (NoAnnotation a) where
 -- >   instance CanAnnotate a => CanAnnotate (Maybe a)
 newtype AnnotateGenericallyAs b a = AnnotateGenericallyAs a
 
--- | Internal auxiliary: two-parameter wrapper around 'CanAnnotate'
-class Annotate' a b where
-  annotate' :: a -> b
-
-instance (CanAnnotate a, b ~ Annotated a) => Annotate' a b where
-  annotate' = annotate
-
 type instance Annotation (AnnotateGenericallyAs b a) = ()
 
 instance ( SOP.Generic a
          , SOP.Generic b
-         , SOP.SameShapeAs (SOP.Code a) (SOP.Code b)
-         , SOP.SameShapeAs (SOP.Code b) (SOP.Code a)
          , SOP.AllZip2 Annotate' (SOP.Code a) (SOP.Code b)
          ) => CanAnnotate (AnnotateGenericallyAs b a) where
+
   type Annotated (AnnotateGenericallyAs b a) = b
+
   annotate (AnnotateGenericallyAs x) =
-       SOP.to
-     . SOP.htrans (Proxy @Annotate') (SOP.mapII annotate')
-     . SOP.from
-     $ x
+        SOP.to
+      . SOP.htrans (Proxy @Annotate') (SOP.mapII annotate')
+      . SOP.from
+      $ x
+
+  dropAnnotation =
+        AnnotateGenericallyAs
+      . SOP.to
+      . htransInv_SOP (Proxy @Annotate') (SOP.mapII dropAnnotation')
+      . SOP.from
 
 {-------------------------------------------------------------------------------
   Standard instances: no annotation
@@ -234,6 +341,7 @@ deriving
 instance CanAnnotate a => CanAnnotate (Solo a) where
   type Annotated (Solo a) = Solo (Annotated a)
   annotate (Solo x) = Solo (annotate x)
+  dropAnnotation (Solo x) = Solo (dropAnnotation x)
 
 -- 2
 deriving
