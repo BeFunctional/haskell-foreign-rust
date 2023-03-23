@@ -12,6 +12,7 @@ module Foreign.Rust.Marshall.Variable (
   , getVarBuffer
   , withBorshVarBuffer
   , withBorshFailure
+  , withBorshBufferOfInitSize
     -- ** Pure variants
   , withPureBorshVarBuffer
   , withPureBorshFailure
@@ -103,10 +104,10 @@ withPureBorshFailure :: forall a.
 withPureBorshFailure = unsafePerformIO . withBorshFailure
 
 {-------------------------------------------------------------------------------
-  Internal auxiliary
+  Generalization
 -------------------------------------------------------------------------------}
 
--- | Generalization of 'withBorshVarBuffer' and 'withMaxBorshBuffer'
+-- | Variation on 'withBorshVarBuffer' with user-specified initial buffer size
 withBorshBufferOfInitSize :: forall a.
      ( FromBorsh a
      , StaticBorshSize a ~ 'HasVariableSize
