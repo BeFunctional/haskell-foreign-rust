@@ -139,7 +139,10 @@ Structured.deriveInstance 'SomeRecord [t|
 main :: IO ()
 main = do
     -- Annotations
-    Structured.print . annotate $ [(Just Keypair, True)]
+    Structured.print . annotate $
+      [(Just Keypair, True)]
+    Structured.print . dropAnnotation @[(Maybe Keypair, Bool)] . annotate $
+      [(Just Keypair, True)]
     -- Generics
     Structured.print $ RecordA { recA_field1 = True, recA_field2 = 5 }
     Structured.print $ RecordB { recB = SomeOtherType "hi" }
