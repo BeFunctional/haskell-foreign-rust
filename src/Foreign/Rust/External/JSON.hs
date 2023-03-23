@@ -19,11 +19,12 @@ import Codec.Borsh
 import Foreign.Rust.Failure
 import GHC.Stack
 
-import qualified Data.Aeson           as Aeson
-import qualified Data.Aeson.Encoding  as Aeson (unsafeToEncoding)
-import qualified Data.Aeson.Types     as Aeson (parseFail)
-import qualified Data.Binary.Builder  as Binary
-import qualified Data.ByteString.Lazy as Lazy (ByteString)
+import qualified Data.Aeson                 as Aeson
+import qualified Data.Aeson.Encoding        as Aeson (unsafeToEncoding)
+import qualified Data.Aeson.Types           as Aeson (parseFail)
+import qualified Data.Binary.Builder        as Binary
+import qualified Data.ByteString.Lazy       as Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as Lazy.Char8
 
 {-------------------------------------------------------------------------------
   Serialisation
@@ -33,6 +34,9 @@ import qualified Data.ByteString.Lazy as Lazy (ByteString)
 newtype JSON = JSON Lazy.ByteString
   deriving stock (Eq)
   deriving newtype (BorshSize, ToBorsh, FromBorsh)
+
+instance Show JSON where
+  show (JSON bs) = Lazy.Char8.unpack bs
 
 -- | Types with a Rust-side JSON renderer
 class ToJSON a where
