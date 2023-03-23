@@ -11,26 +11,20 @@ module Foreign.Rust.Marshall.Variable (
   , Buffer -- opaque
   , getVarBuffer
   , withBorshVarBuffer
-  , withBorshFailure
   , withBorshBufferOfInitSize
     -- ** Pure variants
   , withPureBorshVarBuffer
-  , withPureBorshFailure
   ) where
 
 import Codec.Borsh
-import Data.Bifunctor
-import Data.Text (Text)
 import Data.Typeable
 import Foreign
 import Foreign.C.Types
-import GHC.Stack
 import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.ByteString as Strict
 
 import Foreign.Rust.Marshall.Util
-import Foreign.Rust.Failure
 
 {-------------------------------------------------------------------------------
   Haskell to Rust
@@ -72,16 +66,6 @@ withBorshVarBuffer :: forall a.
   => (Buffer a -> IO ()) -> IO a
 withBorshVarBuffer = withBorshBufferOfInitSize 1024
 
--- | Wrapper around 'withBorshVarBuffer' with explicit support for failures
-withBorshFailure :: forall a.
-     ( FromBorsh a
-     , StaticBorshSize a ~ 'HasVariableSize
-     , Typeable a
-     , HasCallStack
-     )
-  => (Buffer (Either Text a) -> IO ()) -> IO (Either Failure a)
-withBorshFailure = fmap (first mkFailure) . withBorshVarBuffer
-
 {-------------------------------------------------------------------------------
   Pure variants
 -------------------------------------------------------------------------------}
@@ -93,15 +77,6 @@ withPureBorshVarBuffer :: forall a.
      )
   => (Buffer a -> IO ()) -> a
 withPureBorshVarBuffer = unsafePerformIO . withBorshVarBuffer
-
-withPureBorshFailure :: forall a.
-     ( FromBorsh a
-     , StaticBorshSize a ~ 'HasVariableSize
-     , Typeable a
-     , HasCallStack
-     )
-  => (Buffer (Either Text a) -> IO ()) -> Either Failure a
-withPureBorshFailure = unsafePerformIO . withBorshFailure
 
 {-------------------------------------------------------------------------------
   Generalization

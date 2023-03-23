@@ -16,6 +16,8 @@ module Foreign.Rust.External.JSON (
   ) where
 
 import Codec.Borsh
+import Foreign.Rust.Failure
+import GHC.Stack
 
 import qualified Data.Aeson           as Aeson
 import qualified Data.Aeson.Encoding  as Aeson (unsafeToEncoding)
@@ -32,13 +34,13 @@ newtype JSON = JSON Lazy.ByteString
   deriving stock (Eq)
   deriving newtype (BorshSize, ToBorsh, FromBorsh)
 
--- | Types with an external JSON renderer (typically, in Rust)
+-- | Types with a Rust-side JSON renderer
 class ToJSON a where
   toJSON :: a -> JSON
 
--- | Types with an external JSON parser (typically, in Rust)
+-- | Types with a Rust-side JSON parser
 class FromJSON a where
-  fromJSON :: JSON -> Either String a
+  fromJSON :: HasCallStack => JSON -> Either Failure a
 
 {-------------------------------------------------------------------------------
   Deriving-via: derive Aeson instances using external (de)serialiser
@@ -67,6 +69,6 @@ instance ToJSON a => Aeson.ToJSON (UseExternalJSON a) where
 instance FromJSON a => Aeson.FromJSON (UseExternalJSON a) where
   parseJSON val =
       case fromJSON (JSON (Aeson.encode val)) of
-        Left failure -> Aeson.parseFail failure
+        Left failure -> Aeson.parseFail (show failure)
         Right tx     -> return $ UseExternalJSON tx
 
