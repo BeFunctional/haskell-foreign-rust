@@ -123,6 +123,9 @@ data Value where
   -- These are shown assuming @NumericUnderscores@.
   Integral :: forall a. (Prelude.Show a, Integral a) => a -> Value
 
+  -- | Floating point numbers
+  Floating :: Double -> Value
+
   -- | Quasi-quote
   --
   -- We separate out the quasi-quoter from the quoted string proper.
@@ -258,6 +261,9 @@ instance Show Int64   where toValue = Integral
 instance Show Int128  where toValue = Integral
 
 instance Show Integer where toValue = Integral
+
+instance Show Float  where toValue = Floating . realToFrac
+instance Show Double where toValue = Floating
 
 instance {-# OVERLAPPABLE #-} Show a => Show [a] where
   toValue = List . map toValue
@@ -451,6 +457,7 @@ render = \contextNeedsBrackets ->
         bracketIf (contextneedsBrackets && requiresBrackets val) $
           case val of
             Integral x     -> simple $ addNumericUnderscores (Prelude.show x)
+            Floating x     -> simple $ Prelude.show x
             String x       -> simple $ Prelude.show x
             Constr c ts xs -> renderComposite (compositeConstr c ts) $
                                 map (go True) xs
