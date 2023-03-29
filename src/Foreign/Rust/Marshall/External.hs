@@ -6,48 +6,67 @@ module Foreign.Rust.Marshall.External (
   ) where
 
 import Codec.Borsh
-import Control.Exception
 import Data.Typeable
 import Data.Word
 import Foreign.C
-import Foreign.Concurrent
 import Foreign.Ptr
 
 import qualified Data.ByteString.Internal as Strict
 
 import Foreign.Rust.Marshall.Util
+import Foreign.ForeignPtr
 
-data External
+data ExternalBuffer
 
-foreign import ccall "haskell_ffi_external_ptr"
+{-------------------------------------------------------------------------------
+  Foreign imports
+
+  Although 'externalPtr' and 'externalLen' are morally pure, we make
+  them live in IO to make reasoning about order of operations easier in
+  'fromExternalBorsh'.
+
+  These C functions are defined in the companion Rust @haskell-ffi@ library.
+-------------------------------------------------------------------------------}
+
+foreign import ccall unsafe "haskell_ffi_external_ptr"
      externalPtr
-  :: Ptr External -> Ptr Word8
+  :: Ptr ExternalBuffer -> IO (Ptr Word8)
 
-foreign import ccall "haskell_ffi_external_len"
+foreign import ccall unsafe "haskell_ffi_external_len"
      externalLen
-  :: Ptr External -> CSize
+  :: Ptr ExternalBuffer -> IO CSize
 
-foreign import ccall "haskell_ffi_external_free"
+foreign import ccall unsafe "&haskell_ffi_external_free_env"
      externalFree
-  :: Ptr External -> IO ()
+  :: FinalizerEnvPtr ExternalBuffer Word8
 
--- | Internal auxiliary: cast pointer
+{-------------------------------------------------------------------------------
+  Internal auxiliary
+-------------------------------------------------------------------------------}
+
+-- | Cast pointer
 --
 -- For ease of integration with c2hs, 'fromExternalBorsh' takes a @Ptr ()@ as
--- input instead of the more accurate @Ptr External@.
-castToExternal :: Ptr () -> Ptr External
+-- input instead of the more accurate @Ptr ExternalBuffer@.
+castToExternal :: Ptr () -> Ptr ExternalBuffer
 castToExternal = castPtr
+
+{-------------------------------------------------------------------------------
+  Public API
+-------------------------------------------------------------------------------}
 
 -- | Output marshaller for values stored in Rust-allocated buffer
 --
 -- Should be used together with the Rust function @marshall_to_haskell_external@
 -- (from @haskell-ffi@).
 fromExternalBorsh :: (FromBorsh a, Typeable a) => Ptr () -> IO a
-fromExternalBorsh (castToExternal -> ptr) = do
-    len  <- evaluate $ fromIntegral $ externalLen ptr
-    fptr <- newForeignPtr (externalPtr ptr) (externalFree ptr)
+fromExternalBorsh (castToExternal -> vec) = do
+    ptr  <- externalPtr vec
+    len  <- fromIntegral <$> externalLen vec
+    fptr <- newForeignPtrEnv externalFree vec ptr
 
     let bs :: Strict.ByteString
-        bs = Strict.PS fptr 0 len
+        bs = Strict.fromForeignPtr fptr 0 len
 
     return $ deserialiseStrictOrPanic bs
+
