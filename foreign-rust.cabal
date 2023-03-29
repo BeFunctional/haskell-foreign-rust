@@ -93,6 +93,8 @@ library
     , th-abstraction
     , vector
     , wide-word
+  c-sources:
+    cbits/wrap-rust-haskell-ffi.c
 
 test-suite test-foreign-rust
   import:
