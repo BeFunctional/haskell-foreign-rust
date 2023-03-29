@@ -48,6 +48,7 @@ common lang
       TypeFamilies
       TypeOperators
       UndecidableInstances
+      ViewPatterns
 
 library
   import:
@@ -56,6 +57,7 @@ library
       Foreign.Rust.External.JSON
       Foreign.Rust.External.Bincode
       Foreign.Rust.Failure
+      Foreign.Rust.Marshall.External
       Foreign.Rust.Marshall.Fixed
       Foreign.Rust.Marshall.Variable
       Foreign.Rust.SafeConv
